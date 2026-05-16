@@ -377,17 +377,17 @@ function splitCSV(line) {
 // COLORS
 // ══════════════════════════════════════════
 function pc(p='') {
-  if(p.includes('เขต 1'))return'#38bdf8';
-  if(p.includes('เขต 2'))return'#c084fc';
-  if(p.includes('เขต 3'))return'#22d3a0';
+  if(p.includes('เขตที่ 1')||p.includes('เขต 1'))return'#38bdf8';
+  if(p.includes('เขตที่ 2')||p.includes('เขต 2'))return'#c084fc';
+  if(p.includes('เขตที่ 3')||p.includes('เขต 3'))return'#22d3a0';
   if(p.includes('ร้อยเวร')||p.includes('20'))return'#f59e0b';
   if(p.includes('จราจร'))return'#fb923c';
   return'#6b7280';
 }
 function ps(p='') {
-  if(p.includes('เขต 1'))return'เขต 1';
-  if(p.includes('เขต 2'))return'เขต 2';
-  if(p.includes('เขต 3'))return'เขต 3';
+  if(p.includes('เขตที่ 1')||p.includes('เขต 1'))return'เขต 1';
+  if(p.includes('เขตที่ 2')||p.includes('เขต 2'))return'เขต 2';
+  if(p.includes('เขตที่ 3')||p.includes('เขต 3'))return'เขต 3';
   if(p.includes('ร้อยเวร')||p.includes('20'))return'ร้อยเวร';
   if(p.includes('จราจร'))return'จราจร';
   return p.slice(0,5)||'—';
