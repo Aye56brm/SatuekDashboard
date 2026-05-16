@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>สตึก PATROL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg:      #0b0e15;
+      --surf:    #111620;
+      --surf2:   #171d2a;
+      --border:  #1e2840;
+      --fg:      #dde8f5;
+      --muted:   #4e6480;
+      --accent:  #3b82f6;
+      --ok:      #22d3a0;
+      --warn:    #f05252;
+      --gold:    #f59e0b;
+      --e1:#38bdf8; --e2:#c084fc; --e3:#22d3a0; --r20:#f59e0b; --tr:#fb923c;
+      --font: 'Kanit', sans-serif;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; overflow:hidden; background:var(--bg); }
+    body { font-family:var(--font); color:var(--fg); -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; }
+
+    /* ── DEVICE WRAP (desktop preview) ── */
+    .device-wrap { display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding:32px 20px; background:#070a10; }
+    .device-frame { width:390px; min-height:844px; background:#000; border-radius:52px; padding:11px; box-shadow:0 24px 80px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.07); flex-shrink:0; }
+    .screen { width:100%; height:820px; background:var(--bg); border-radius:42px; overflow:hidden; display:flex; flex-direction:column; }
+
+    @media(max-width:430px){
+      .device-wrap { padding:0; background:var(--bg); }
+      .device-frame { width:100%; border-radius:0; padding:0; box-shadow:none; min-height:100vh; }
+      .screen { border-radius:0; height:100dvh; }
+    }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:13px 22px 6px; flex-shrink:0;
+    }
+    .status-clock { font-family:var(--mono); font-size:15px; font-weight:600; }
+    .dynamic-island { width:110px; height:32px; background:#000; border-radius:18px; position:absolute; top:9px; left:50%; transform:translateX(-50%); }
+    .status-right { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--ok); animation:blink 1.8s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* ── HEADER ── */
+    .header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 20px 10px; flex-shrink:0;
+      border-bottom:1px solid var(--border);
+      background:var(--surf);
+    }
+    .header-brand { display:flex; align-items:baseline; gap:6px; }
+    .brand-th { font-size:13px; font-weight:500; color:var(--muted); letter-spacing:.04em; }
+    .brand-en { font-size:22px; font-weight:400; letter-spacing:.06em; color:var(--fg); line-height:1; }
+    .brand-en span { color:var(--accent); font-weight:700; }
+    .header-right { display:flex; align-items:center; gap:8px; }
+    .cd-wrap { position:relative; width:28px; height:28px; cursor:pointer; }
+    .cd-wrap svg { position:absolute; top:0; left:0; }
+    .cd-num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:7.5px; color:var(--muted); }
+    .refresh-btn { background:var(--surf2); border:1px solid var(--border); color:var(--fg); border-radius:8px; padding:5px 10px; font-family:var(--font); font-size:12px; cursor:pointer; }
+
+    /* ── ALERT ── */
+    .alert-bar {
+      display:flex; align-items:center; gap:10px;
+      padding:9px 18px; flex-shrink:0;
+      background:#1a0e0e; border-bottom:1px solid #3d1515;
+    }
+    .alert-bar.hidden { display:none; }
+    .alert-icon { font-size:16px; flex-shrink:0; }
+    .alert-lbl { font-size:9px; color:var(--warn); text-transform:uppercase; letter-spacing:.07em; font-weight:600; }
+    .alert-txt { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* ── STATS ── */
+    .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border-bottom:1px solid var(--border); flex-shrink:0; }
+    .stat { background:var(--surf); padding:12px 10px; text-align:center; }
+    .stat-val { font-family:var(--mono); font-size:22px; font-weight:700; letter-spacing:-.02em; }
+    .stat-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:2px; font-weight:500; }
+
+    /* ── CONTENT PAGES ── */
+    .page { flex:1; overflow:hidden; display:none; flex-direction:column; }
+    .page.active { display:flex; }
+    .scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    .scroll::-webkit-scrollbar { width:3px; }
+    .scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+    .sec-hdr {
+      padding:14px 18px 9px; font-size:10px; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.07em; font-weight:700;
+      background:var(--bg); position:sticky; top:0; z-index:5;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .sec-badge { font-family:var(--mono); font-size:10px; color:var(--accent); background:rgba(59,130,246,.12); padding:2px 8px; border-radius:10px; }
+
+    /* ── REPORT CARD ── */
+    .rcard {
+      background:var(--surf); padding:13px 18px;
+      border-bottom:1px solid var(--border);
+      display:flex; gap:12px; cursor:pointer; transition:background .1s;
+    }
+    .rcard:hover { background:var(--surf2); }
+    .rbar { width:3px; border-radius:2px; flex-shrink:0; background:var(--ok); }
+    .rcard.warn .rbar { background:var(--warn); }
+    .rbody { flex:1; min-width:0; }
+    .rtop { display:flex; justify-content:space-between; gap:8px; margin-bottom:4px; }
+    .rzone { font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.3; }
+    .rtime { font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+    .rplace { font-size:12px; color:var(--muted); margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+    .rmeta { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+    .pbadge { padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; font-family:var(--mono); }
+    .sbadge { padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; }
+    .s-ok   { background:rgba(34,211,160,.1); color:var(--ok); }
+    .s-warn { background:rgba(240,82,82,.1);  color:var(--warn); }
+    .rnote  { font-size:10px; color:var(--muted); }
+
+    /* ── GPS LIST ── */
+    .gitem { background:var(--surf); padding:11px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .gdot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .gbody { flex:1; min-width:0; }
+    .gzone { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gcoord { font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:2px; }
+    .gtime { font-family:var(--mono); font-size:10px; color:var(--muted); text-align:right; white-space:nowrap; line-height:1.6; }
+
+    /* ── MAP ── */
+    #map { width:100%; flex:1; background:#0a0f1a; }
+    .leaflet-tile-pane { filter:brightness(.85); }
+    .map-toggle {
+      position:absolute; top:10px; right:10px; z-index:500;
+      display:flex; background:rgba(11,14,21,.88); border:1px solid var(--border);
+      border-radius:8px; overflow:hidden; backdrop-filter:blur(8px);
+    }
+    .map-toggle button {
+      padding:6px 12px; background:transparent; border:none;
+      color:var(--muted); font-family:var(--font); font-size:11px; cursor:pointer; transition:.15s;
+    }
+    .map-toggle button.on { background:var(--accent); color:#fff; }
+    .map-wrap { flex:1; position:relative; display:flex; flex-direction:column; }
+
+    /* ── STATS CHART ── */
+    .chart-section { padding:12px; display:flex; flex-direction:column; gap:10px; }
+    .ccard { background:var(--surf); border:1px solid var(--border); border-radius:10px; padding:14px; }
+    .ctitle { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-weight:700; margin-bottom:10px; }
+    .brow { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+    .blbl { width:54px; text-align:right; font-size:10px; color:var(--muted); flex-shrink:0; font-weight:500; }
+    .bbg { flex:1; height:11px; background:var(--border); border-radius:3px; overflow:hidden; }
+    .bfill { height:100%; border-radius:3px; transition:width .7s ease; }
+    .bval { width:22px; font-family:var(--mono); font-size:10px; color:var(--fg); }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      height:80px; background:var(--surf); border-top:1px solid var(--border);
+      display:flex; align-items:flex-start; justify-content:space-around;
+      padding:8px 4px 20px; flex-shrink:0;
+    }
+    .nav-btn {
+      display:flex; flex-direction:column; align-items:center; gap:3px;
+      padding:5px 8px; min-width:52px; border:none; background:transparent;
+      color:var(--muted); font-family:var(--font); cursor:pointer; border-radius:8px;
+      transition:color .15s; -webkit-tap-highlight-color:transparent;
+    }
+    .nav-btn.on { color:var(--accent); }
+    .nav-icon { font-size:20px; line-height:1; }
+    .nav-lbl { font-size:10px; font-weight:500; }
+
+    /* ── EMPTY ── */
+    .empty { text-align:center; padding:40px 20px; color:var(--muted); font-size:13px; }
+    .empty-icon { font-size:36px; margin-bottom:10px; }
+
+    /* ── TOAST & LOADBAR ── */
+    #lbar { position:fixed; top:0; left:0; height:2px; width:0%; z-index:9999; background:linear-gradient(90deg,var(--accent),var(--ok)); transition:width .4s; }
+    #toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:var(--surf2); border:1px solid var(--border); border-radius:8px; padding:7px 16px; font-size:12px; z-index:9999; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+    #toast.on { opacity:1; }
+
+    /* Leaflet popup */
+    .leaflet-popup-content-wrapper { background:var(--surf); border:1px solid var(--border); border-radius:8px; color:var(--fg); font-family:var(--font); box-shadow:0 8px 30px rgba(0,0,0,.5); }
+    .leaflet-popup-tip { background:var(--surf); }
+    .leaflet-popup-content { margin:10px 12px; font-size:12px; line-height:1.6; }
+    .pop-zone { font-weight:700; font-size:13px; }
+    .pop-detail { font-size:11px; color:var(--muted); }
+  </style>
+</head>
+<body>
+<div id="lbar"></div>
+<div id="toast"></div>
+
+<div class="device-wrap">
+<div class="device-frame">
+<div class="screen">
+
+  <!-- Status bar -->
+  <div class="status-bar" style="position:relative">
+    <div class="status-clock" id="clock">00:00</div>
+    <div class="dynamic-island"></div>
+    <div class="status-right">
+      <span id="sync-lbl">Live</span>
+      <div class="live-dot"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-brand">
+      <div>
+        <div class="brand-th">สภ.สตึก · จ.บุรีรัมย์</div>
+        <div class="brand-en">สตึก <span>PATROL</span></div>
+      </div>
+    </div>
+    <div class="header-right">
+      <!-- countdown ring -->
+      <div class="cd-wrap" onclick="doRefresh()" title="รีเฟรช">
+        <svg width="28" height="28">
+          <circle cx="14" cy="14" r="11" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+          <circle id="cd-ring" cx="14" cy="14" r="11" fill="none"
+            stroke="var(--accent)" stroke-width="2.5"
+            stroke-dasharray="69.1" stroke-dashoffset="0"
+            stroke-linecap="round" transform="rotate(-90 14 14)"
+            style="transition:stroke-dashoffset .9s linear"/>
+        </svg>
+        <div class="cd-num" id="cd-txt"></div>
+      </div>
+      <button class="refresh-btn" onclick="doRefresh()">⟳</button>
+    </div>
+  </div>
+
+  <!-- Alert -->
+  <div class="alert-bar hidden" id="alert-bar">
+    <div class="alert-icon">⚠️</div>
+    <div style="min-width:0">
+      <div class="alert-lbl">รายงานผิดปกติ</div>
+      <div class="alert-txt" id="alert-txt">—</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat"><div class="stat-val" id="s-tot" style="color:var(--accent)">—</div><div class="stat-lbl">รายงาน</div></div>
+    <div class="stat"><div class="stat-val" id="s-ok"  style="color:var(--ok)">—</div><div class="stat-lbl">ปกติ</div></div>
+    <div class="stat"><div class="stat-val" id="s-warn"style="color:var(--warn)">—</div><div class="stat-lbl">ผิดปกติ</div></div>
+  </div>
+
+  <!-- PAGES -->
+
+  <!-- PAGE: รายงาน -->
+  <div class="page active" id="page-report">
+    <div class="scroll">
+      <div class="sec-hdr"><span>รายงานทั้งหมด</span><span class="sec-badge" id="r-count">0</span></div>
+      <div id="report-list"><div class="empty"><div class="empty-icon">📡</div>กำลังโหลด...</div></div>
+    </div>
+  </div>
+
+  <!-- PAGE: แผนที่ -->
+  <div class="page" id="page-map">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-toggle">
+        <button class="on" id="btn-street"  onclick="setLayer('street',this)">🗺 แผนที่</button>
+        <button          id="btn-satellite" onclick="setLayer('satellite',this)">🛰 ดาวเทียม</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE: GPS -->
+  <div class="page" id="page-gps">
+    <div class="scroll">
+      <div class="sec-hdr"><span>พิกัด GPS</span><span class="sec-badge" id="g-count">0</span></div>
+      <div id="gps-list"><div class="empty"><div class="empty-icon">🛰️</div>ไม่มีพิกัด GPS</div></div>
+    </div>
+  </div>
+
+  <!-- PAGE: สถิติ -->
+  <div class="page" id="page-stats">
+    <div class="scroll">
+      <div class="chart-section">
+        <div class="ccard"><div class="ctitle">รายประเภทสายตรวจ</div><div id="c-patrol"></div></div>
+        <div class="ccard"><div class="ctitle">สถานการณ์รวม</div><div id="c-summary"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <button class="nav-btn on" onclick="goPage('report',this)"><div class="nav-icon">📋</div><div class="nav-lbl">รายงาน</div></button>
+    <button class="nav-btn"    onclick="goPage('map',this)"><div class="nav-icon">🗺️</div><div class="nav-lbl">แผนที่</div></button>
+    <button class="nav-btn"    onclick="goPage('gps',this)"><div class="nav-icon">📍</div><div class="nav-lbl">GPS</div></button>
+    <button class="nav-btn"    onclick="goPage('stats',this)"><div class="nav-icon">📊</div><div class="nav-lbl">สถิติ</div></button>
+  </div>
+
+</div></div></div>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════
+const SHEET_ID  = '1wedkPecV1Pnw_jR43nOtMzAAn4rPr1PPHOCgoT5f6fo';
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1`;
+const REFRESH_S = 90;
+const CENTER    = [15.291, 103.284];
+
+// ══════════════════════════════════════════
+// MAP SETUP
+// ══════════════════════════════════════════
+const map = L.map('map', { center:CENTER, zoom:14, zoomControl:false, attributionControl:false });
+
+const LAYERS = {
+  street: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 })
+};
+LAYERS.street.addTo(map);
+let currentLayer = 'street';
+
+function setLayer(name, btn) {
+  map.removeLayer(LAYERS[currentLayer]);
+  LAYERS[name].addTo(map);
+  currentLayer = name;
+  document.getElementById('btn-street').classList.toggle('on', name==='street');
+  document.getElementById('btn-satellite').classList.toggle('on', name==='satellite');
+  // satellite ไม่ต้อง filter
+  document.querySelector('.leaflet-tile-pane').style.filter = name==='satellite' ? 'brightness(1)' : 'brightness(.8)';
+}
+
+setTimeout(() => map.invalidateSize(), 500);
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let rows = [], markers = [], cdLeft = REFRESH_S, cdTimer = null;
+
+// ══════════════════════════════════════════
+// FETCH
+// ══════════════════════════════════════════
+async function loadSheet() {
+  bar(20); lbl('โหลด...');
+  try {
+    const txt = await fetch(SHEET_URL + '&_=' + Date.now()).then(r => r.text());
+    bar(70);
+    rows = parseCSV(txt);
+    bar(100); lbl('Live');
+    render();
+    toast(`✓ ${rows.length} รายการ`);
+  } catch(e) {
+    bar(0); lbl('ออฟไลน์');
+    toast('⚠ โหลดไม่ได้');
+  }
+  resetCD();
+}
+
+function parseCSV(txt) {
+  const lines = txt.trim().split('\n');
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = splitCSV(lines[i]);
+    if (c.length < 3) continue;
+    const lat = parseFloat(c[8] || ''), lng = parseFloat(c[9] || '');
+    out.push({
+      date: cl(c[0]), time: cl(c[1]), patrol: cl(c[2]),
+      zone: cl(c[3]), zoneName: cl(c[4]), places: cl(c[5]),
+      status: cl(c[6]), note: cl(c[7]),
+      lat: isNaN(lat) ? null : lat, lng: isNaN(lng) ? null : lng,
+      hasGPS: !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0,
+    });
+  }
+  return out.reverse();
+}
+function cl(s='') { return (s||'').replace(/^"|"$/g,'').trim(); }
+function splitCSV(line) {
+  const r=[];let f='',q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){q=!q;}else if(c===','&&!q){r.push(f);f='';}else{f+=c;}}
+  r.push(f);return r;
+}
+
+// ══════════════════════════════════════════
+// COLORS
+// ══════════════════════════════════════════
+function pc(p='') {
+  if(p.includes('เขต 1'))return'#38bdf8';
+  if(p.includes('เขต 2'))return'#c084fc';
+  if(p.includes('เขต 3'))return'#22d3a0';
+  if(p.includes('ร้อยเวร')||p.includes('20'))return'#f59e0b';
+  if(p.includes('จราจร'))return'#fb923c';
+  return'#6b7280';
+}
+function ps(p='') {
+  if(p.includes('เขต 1'))return'เขต 1';
+  if(p.includes('เขต 2'))return'เขต 2';
+  if(p.includes('เขต 3'))return'เขต 3';
+  if(p.includes('ร้อยเวร')||p.includes('20'))return'ร้อยเวร';
+  if(p.includes('จราจร'))return'จราจร';
+  return p.slice(0,5)||'—';
+}
+
+// ══════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════
+function render() {
+  const ok   = rows.filter(r => r.status && !r.status.includes('ผิดปกติ')).length;
+  const warn = rows.filter(r => r.status &&  r.status.includes('ผิดปกติ')).length;
+  document.getElementById('s-tot').textContent  = rows.length;
+  document.getElementById('s-ok').textContent   = ok;
+  document.getElementById('s-warn').textContent = warn;
+
+  // alert
+  const lw = rows.find(r => r.status && r.status.includes('ผิดปกติ'));
+  const ab = document.getElementById('alert-bar');
+  if (lw) {
+    ab.classList.remove('hidden');
+    document.getElementById('alert-txt').textContent = `${lw.zoneName||lw.zone||lw.places} · ${lw.time}`;
+  } else ab.classList.add('hidden');
+
+  renderReports();
+  renderMap();
+  renderGPS();
+  renderStats();
+}
+
+function renderReports() {
+  document.getElementById('r-count').textContent = rows.length;
+  const el = document.getElementById('report-list');
+  if (!rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>ยังไม่มีรายงาน</div>'; return; }
+  el.innerHTML = rows.slice(0, 80).map(r => {
+    const isW = r.status && r.status.includes('ผิดปกติ');
+    const c = pc(r.patrol);
+    const zone = r.zoneName || r.zone || r.places || '—';
+    return `<div class="rcard ${isW?'warn':''}">
+      <div class="rbar"></div>
+      <div class="rbody">
+        <div class="rtop">
+          <div class="rzone">${zone}</div>
+          <div class="rtime">${r.time||'—'}</div>
+        </div>
+        <div class="rplace">📍 ${r.places||r.zoneName||'—'}</div>
+        <div class="rmeta">
+          <span class="pbadge" style="background:${c}18;color:${c}">${ps(r.patrol)}</span>
+          <span class="sbadge ${isW?'s-warn':'s-ok'}">${isW?'⚠ ผิดปกติ':'✓ ปกติ'}</span>
+          ${r.note ? `<span class="rnote">💬 ${r.note}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMap() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const gps = rows.filter(r => r.hasGPS);
+  if (!gps.length) return;
+
+  gps.forEach(r => {
+    const isW = r.status && r.status.includes('ผิดปกติ');
+    const c = pc(r.patrol);
+    const border = isW ? '#f05252' : '#22d3a0';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:13px;height:13px;border-radius:50%;background:${c};border:2.5px solid ${border};box-shadow:0 0 8px ${c}88;cursor:pointer"></div>`,
+      iconAnchor: [6,6]
+    });
+    const mk = L.marker([r.lat, r.lng], { icon });
+    mk.bindPopup(`
+      <div class="pop-zone" style="color:${c}">${r.zoneName||r.zone||'—'}</div>
+      <div class="pop-detail">${r.patrol}</div>
+      <div class="pop-detail">${r.date} · ${r.time}</div>
+      <div class="pop-detail" style="color:${isW?'#f05252':'#22d3a0'};font-weight:600">${isW?'⚠ ผิดปกติ':'✓ ปกติ'}${r.note?' · '+r.note:''}</div>
+    `, { maxWidth: 200 });
+    mk.addTo(map);
+    markers.push(mk);
+  });
+
+  // zoom to fit markers
+  const group = L.featureGroup(markers);
+  map.fitBounds(group.getBounds().pad(.15));
+}
+
+function renderGPS() {
+  const gps = rows.filter(r => r.hasGPS);
+  document.getElementById('g-count').textContent = gps.length;
+  const el = document.getElementById('gps-list');
+  if (!gps.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🛰️</div>ยังไม่มีพิกัด GPS<br><small style="font-size:11px">GPS จะบันทึกเมื่อสายตรวจรายงานในพื้นที่</small></div>'; return; }
+  el.innerHTML = gps.map(r => {
+    const c = pc(r.patrol);
+    const isW = r.status && r.status.includes('ผิดปกติ');
+    return `<div class="gitem">
+      <div class="gdot" style="background:${isW?'#f05252':'#22d3a0'};box-shadow:0 0 6px ${isW?'#f0525266':'#22d3a066'}"></div>
+      <div class="gbody">
+        <div class="gzone" style="color:${c}">${r.zoneName||r.zone||'—'}</div>
+        <div class="gcoord">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
+      </div>
+      <div class="gtime">${r.date}<br>${r.time}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStats() {
+  const byP = {};
+  rows.forEach(r => {
+    const k = ps(r.patrol) || 'อื่นๆ';
+    if (!byP[k]) byP[k] = { n:0, c:pc(r.patrol) };
+    byP[k].n++;
+  });
+  const maxN = Math.max(...Object.values(byP).map(v => v.n), 1);
+  document.getElementById('c-patrol').innerHTML = Object.entries(byP).map(([k,v]) => `
+    <div class="brow">
+      <div class="blbl" style="color:${v.c}">${k}</div>
+      <div class="bbg"><div class="bfill" style="width:${Math.round(v.n/maxN*100)}%;background:${v.c}99"></div></div>
+      <div class="bval">${v.n}</div>
+    </div>`).join('');
+
+  const ok   = rows.filter(r => !r.status.includes('ผิดปกติ')).length;
+  const warn = rows.filter(r =>  r.status.includes('ผิดปกติ')).length;
+  const gps  = rows.filter(r => r.hasGPS).length;
+  const tot  = Math.max(rows.length, 1);
+  document.getElementById('c-summary').innerHTML = `
+    <div class="brow"><div class="blbl" style="color:#22d3a0">ปกติ</div><div class="bbg"><div class="bfill" style="width:${Math.round(ok/tot*100)}%;background:#22d3a0"></div></div><div class="bval">${ok}</div></div>
+    <div class="brow"><div class="blbl" style="color:#f05252">ผิดปกติ</div><div class="bbg"><div class="bfill" style="width:${Math.round(warn/tot*100)}%;background:#f05252"></div></div><div class="bval">${warn}</div></div>
+    <div class="brow"><div class="blbl" style="color:#38bdf8">มี GPS</div><div class="bbg"><div class="bfill" style="width:${Math.round(gps/tot*100)}%;background:#38bdf888"></div></div><div class="bval">${gps}</div></div>`;
+}
+
+// ══════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════
+function goPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  if (name === 'map') setTimeout(() => map.invalidateSize(), 100);
+}
+
+// ══════════════════════════════════════════
+// COUNTDOWN
+// ══════════════════════════════════════════
+const CIRC = 69.1;
+function resetCD() {
+  cdLeft = REFRESH_S;
+  clearInterval(cdTimer);
+  cdTimer = setInterval(() => {
+    cdLeft--;
+    document.getElementById('cd-ring').style.strokeDashoffset = CIRC * (1 - cdLeft / REFRESH_S);
+    document.getElementById('cd-txt').textContent = cdLeft > 0 ? cdLeft : '';
+    if (cdLeft <= 0) { clearInterval(cdTimer); loadSheet(); }
+  }, 1000);
+}
+function doRefresh() { loadSheet(); }
+
+// ══════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════
+setInterval(() => {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}, 1000);
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function bar(p) { const b=document.getElementById('lbar'); b.style.width=p+'%'; if(p>=100)setTimeout(()=>b.style.width='0%',700); }
+function lbl(t) { document.getElementById('sync-lbl').textContent=t; }
+function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2500); }
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+loadSheet();
+</script>
+</body>
+</html>
