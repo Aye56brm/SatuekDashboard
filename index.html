@@ -282,12 +282,25 @@
     </div>
   </div>
 
+  <!-- PAGE: วิเคราะห์ -->
+  <div class="page" id="page-analysis">
+    <div class="scroll">
+      <div class="sec-hdr">
+        <span>วิเคราะห์รายผลัด</span>
+        <span class="sec-badge" id="an-count">0 ผลัด</span>
+      </div>
+      <div id="analysis-content" style="padding:10px;display:flex;flex-direction:column;gap:10px">
+        <div class="empty"><div class="empty-icon">📈</div>กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bottom nav -->
   <div class="bottom-nav">
     <button class="nav-btn on" onclick="goPage('report',this)"><div class="nav-icon">📋</div><div class="nav-lbl">รายงาน</div></button>
     <button class="nav-btn"    onclick="goPage('map',this)"><div class="nav-icon">🗺️</div><div class="nav-lbl">แผนที่</div></button>
-    <button class="nav-btn"    onclick="goPage('gps',this)"><div class="nav-icon">📍</div><div class="nav-lbl">GPS</div></button>
     <button class="nav-btn"    onclick="goPage('stats',this)"><div class="nav-icon">📊</div><div class="nav-lbl">สถิติ</div></button>
+    <button class="nav-btn"    onclick="goPage('analysis',this)"><div class="nav-icon">🔍</div><div class="nav-lbl">วิเคราะห์</div></button>
   </div>
 
 </div></div></div>
@@ -527,6 +540,7 @@ function goPage(name, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   if (name === 'map') setTimeout(() => map.invalidateSize(), 100);
+  if (name === 'analysis') loadAnalysis();
 }
 
 // ══════════════════════════════════════════
@@ -561,10 +575,176 @@ function bar(p) { const b=document.getElementById('lbar'); b.style.width=p+'%'; 
 function lbl(t) { document.getElementById('sync-lbl').textContent=t; }
 function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2500); }
 
+
+// ══════════════════════════════════════════
+// ANALYSIS — ดึง Sheet2 และวิเคราะห์
+// ══════════════════════════════════════════
+const SHEET2_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet2`;
+let summaryRows = [];
+
+async function loadAnalysis() {
+  try {
+    const txt = await fetch(SHEET2_URL + '&_=' + Date.now()).then(r => r.text());
+    summaryRows = parseSheet2(txt);
+    renderAnalysis();
+  } catch(e) {
+    document.getElementById('analysis-content').innerHTML =
+      '<div class="empty"><div class="empty-icon">⚠️</div>โหลดข้อมูลไม่ได้<br><small>ตรวจสอบการเชื่อมต่อ</small></div>';
+  }
+}
+
+function parseSheet2(txt) {
+  const lines = txt.trim().split('\n');
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = splitCSV(lines[i]);
+    if (c.length < 5) continue;
+    out.push({
+      date:      cl(c[0]),
+      shift:     cl(c[1]),
+      total:     parseInt(cl(c[2]))||0,
+      e1:        parseInt(cl(c[3]))||0,
+      e2:        parseInt(cl(c[4]))||0,
+      e3:        parseInt(cl(c[5]))||0,
+      r20:       parseInt(cl(c[6]))||0,
+      traffic:   parseInt(cl(c[7]))||0,
+      warn:      parseInt(cl(c[8]))||0,
+      gps:       parseInt(cl(c[9]))||0,
+      topZone:   cl(c[10]),
+      lowZone:   cl(c[11]),
+      peakHour:  cl(c[12]),
+    });
+  }
+  return out.reverse(); // ล่าสุดก่อน
+}
+
+function renderAnalysis() {
+  const el = document.getElementById('analysis-content');
+  const n  = summaryRows.length;
+  document.getElementById('an-count').textContent = n + ' ผลัด';
+
+  if (!n) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>ยังไม่มีข้อมูลสรุปผลัด<br><small style="font-size:11px">จะมีข้อมูลหลัง 08:00 น. วันพรุ่งนี้</small></div>';
+    return;
+  }
+
+  // ── รวมทุกผลัด ──
+  const totRpt   = summaryRows.reduce((s,r)=>s+r.total,0);
+  const totWarn  = summaryRows.reduce((s,r)=>s+r.warn,0);
+  const avgRpt   = Math.round(totRpt/n);
+
+  // เขตที่ active สุด
+  const byPatrol = {
+    'เขต 1': summaryRows.reduce((s,r)=>s+r.e1,0),
+    'เขต 2': summaryRows.reduce((s,r)=>s+r.e2,0),
+    'เขต 3': summaryRows.reduce((s,r)=>s+r.e3,0),
+    'ร้อยเวร': summaryRows.reduce((s,r)=>s+r.r20,0),
+    'จราจร': summaryRows.reduce((s,r)=>s+r.traffic,0),
+  };
+  const sorted = Object.entries(byPatrol).sort((a,b)=>b[1]-a[1]);
+  const topPatrol = sorted[0];
+  const lowPatrol = sorted[sorted.length-1];
+
+  // โซนที่ปรากฏบ่อยสุดใน topZone
+  const zoneTally = {};
+  summaryRows.forEach(r => {
+    const z = (r.topZone||'').replace(/\s*\(\d+\)$/,'').trim();
+    if (z && z !== '—') zoneTally[z] = (zoneTally[z]||0) + 1;
+  });
+  const topZoneAll = Object.entries(zoneTally).sort((a,b)=>b[1]-a[1]);
+
+  // ผลัดล่าสุด
+  const latest = summaryRows[0];
+
+  // ── สร้าง HTML ──
+  const pColors = {'เขต 1':'#38bdf8','เขต 2':'#c084fc','เขต 3':'#22d3a0','ร้อยเวร':'#f59e0b','จราจร':'#fb923c'};
+  const maxP = Math.max(...Object.values(byPatrol), 1);
+
+  el.innerHTML = `
+    <!-- KPI cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--accent)">${totRpt}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">รายงานทั้งหมด</div>
+      </div>
+      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--ok)">${avgRpt}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">เฉลี่ย/ผลัด</div>
+      </div>
+      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--warn)">${totWarn}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">ผิดปกติรวม</div>
+      </div>
+      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--gold)">${n}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">ผลัดทั้งหมด</div>
+      </div>
+    </div>
+
+    <!-- รายงานรายเขต -->
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">รายงานรวมรายประเภทสายตรวจ</div>
+      ${sorted.map(([k,v]) => `
+        <div class="brow">
+          <div class="blbl" style="color:${pColors[k]||'#6b7280'}">${k}</div>
+          <div class="bbg"><div class="bfill" style="width:${Math.round(v/maxP*100)}%;background:${pColors[k]||'#6b7280'}99"></div></div>
+          <div class="bval">${v}</div>
+        </div>`).join('')}
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between">
+        <span>🏆 Active สุด: <span style="color:${pColors[topPatrol[0]]}">${topPatrol[0]} (${topPatrol[1]})</span></span>
+        <span>⚠ น้อยสุด: <span style="color:var(--muted)">${lowPatrol[0]} (${lowPatrol[1]})</span></span>
+      </div>
+    </div>
+
+    <!-- โซนที่ถูกรายงานบ่อยสุด -->
+    ${topZoneAll.length ? `
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">โซนที่ถูกรายงานบ่อยสุด (ทุกผลัด)</div>
+      ${topZoneAll.slice(0,5).map(([z,n],idx) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <div style="width:20px;height:20px;border-radius:50%;background:var(--surf2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);color:var(--muted);flex-shrink:0">${idx+1}</div>
+          <div style="flex:1;font-weight:500">${z}</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--accent)">${n} ผลัด</div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    <!-- ผลัดล่าสุด -->
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">ผลัดล่าสุด · ${latest.date}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+        <div style="color:var(--muted)">รวมรายงาน</div><div style="font-family:var(--mono);text-align:right;color:var(--accent)">${latest.total}</div>
+        <div style="color:var(--muted)">ผิดปกติ</div><div style="font-family:var(--mono);text-align:right;color:${latest.warn>0?'var(--warn)':'var(--ok)'}">${latest.warn}</div>
+        <div style="color:var(--muted)">โซนเยอะสุด</div><div style="text-align:right;font-size:10px">${latest.topZone||'—'}</div>
+        <div style="color:var(--muted)">ชั่วโมง Peak</div><div style="font-family:var(--mono);text-align:right">${latest.peakHour||'—'}</div>
+      </div>
+    </div>
+
+    <!-- ประวัติผลัด -->
+    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">ประวัติผลัดย้อนหลัง</div>
+      ${summaryRows.slice(0,10).map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
+          <div style="font-family:var(--mono);color:var(--muted);font-size:10px;width:70px;flex-shrink:0">${r.date}</div>
+          <div style="flex:1">
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              ${r.e1?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#38bdf818;color:#38bdf8">1·${r.e1}</span>`:''}
+              ${r.e2?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#c084fc18;color:#c084fc">2·${r.e2}</span>`:''}
+              ${r.e3?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#22d3a018;color:#22d3a0">3·${r.e3}</span>`:''}
+              ${r.r20?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b18;color:#f59e0b">ร้อย·${r.r20}</span>`:''}
+            </div>
+          </div>
+          <div style="font-family:var(--mono);font-weight:700;color:var(--accent)">${r.total}</div>
+          ${r.warn?`<div style="font-size:9px;color:var(--warn)">⚠${r.warn}</div>`:''}
+        </div>`).join('')}
+    </div>
+  `;
+}
+
 // ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
 loadSheet();
+loadAnalysis();
 </script>
 </body>
 </html>
