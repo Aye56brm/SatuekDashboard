@@ -248,7 +248,7 @@
   <!-- PAGE: รายงาน -->
   <div class="page active" id="page-report">
     <div class="scroll">
-      <div class="sec-hdr"><span>รายงานทั้งหมด</span><span class="sec-badge" id="r-count">0</span></div>
+      <div class="sec-hdr"><span>ผลัดนี้ (08:00 น. — ตอนนี้)</span><span class="sec-badge" id="r-count">0</span></div>
       <div id="report-list"><div class="empty"><div class="empty-icon">📡</div>กำลังโหลด...</div></div>
     </div>
   </div>
@@ -387,6 +387,43 @@ function splitCSV(line) {
 }
 
 // ══════════════════════════════════════════
+// FILTER — วันนี้ 08:00 ถึงตอนนี้
+// ══════════════════════════════════════════
+function getTodayShiftStart() {
+  const now = new Date();
+  const shift = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0, 0);
+  // ถ้าตอนนี้ก่อน 08:00 → shift เริ่มเมื่อวาน 08:00
+  if (now < shift) shift.setDate(shift.getDate() - 1);
+  return shift;
+}
+
+function parseRowDate(dateStr, timeStr) {
+  try {
+    const months = {'ม.ค.':0,'ก.พ.':1,'มี.ค.':2,'เม.ย.':3,'พ.ค.':4,'มิ.ย.':5,'ก.ค.':6,'ส.ค.':7,'ก.ย.':8,'ต.ค.':9,'พ.ย.':10,'ธ.ค.':11};
+    const m = String(dateStr).match(/(\d+)\s+(\S+)\s+(\d+)/);
+    if (!m) return null;
+    let y = parseInt(m[3]);
+    if (y < 100) y += 2500;
+    y -= 543;
+    const mo = months[m[2]];
+    const d  = parseInt(m[1]);
+    if (mo === undefined) return null;
+    const tm = String(timeStr).match(/(\d+)[.:](\d+)/);
+    const hr  = tm ? parseInt(tm[1]) : 0;
+    const min = tm ? parseInt(tm[2]) : 0;
+    return new Date(y, mo, d, hr, min, 0);
+  } catch(e) { return null; }
+}
+
+function todayRows() {
+  const start = getTodayShiftStart();
+  return rows.filter(r => {
+    const dt = parseRowDate(r.date, r.time);
+    return dt && dt >= start;
+  });
+}
+
+// ══════════════════════════════════════════
 // COLORS
 // ══════════════════════════════════════════
 function pc(p='') {
@@ -410,31 +447,33 @@ function ps(p='') {
 // RENDER
 // ══════════════════════════════════════════
 function render() {
-  const ok   = rows.filter(r => r.status && !r.status.includes('ผิดปกติ')).length;
-  const warn = rows.filter(r => r.status &&  r.status.includes('ผิดปกติ')).length;
-  document.getElementById('s-tot').textContent  = rows.length;
+  const today = todayRows();
+  const ok   = today.filter(r => r.status && !r.status.includes('ผิดปกติ')).length;
+  const warn = today.filter(r => r.status &&  r.status.includes('ผิดปกติ')).length;
+  document.getElementById('s-tot').textContent  = today.length;
   document.getElementById('s-ok').textContent   = ok;
   document.getElementById('s-warn').textContent = warn;
 
-  // alert
-  const lw = rows.find(r => r.status && r.status.includes('ผิดปกติ'));
+  // alert — เฉพาะวันนี้
+  const lw = today.find(r => r.status && r.status.includes('ผิดปกติ'));
   const ab = document.getElementById('alert-bar');
   if (lw) {
     ab.classList.remove('hidden');
     document.getElementById('alert-txt').textContent = `${lw.zoneName||lw.zone||lw.places} · ${lw.time}`;
   } else ab.classList.add('hidden');
 
-  renderReports();
-  renderMap();
-  renderGPS();
-  renderStats();
+  renderReports(today);
+  renderMap(today);
+  renderGPS(today);
+  renderStats(); // สถิติใช้ทั้งหมด
 }
 
-function renderReports() {
-  document.getElementById('r-count').textContent = rows.length;
+function renderReports(data) {
+  data = data || rows;
+  document.getElementById('r-count').textContent = data.length;
   const el = document.getElementById('report-list');
-  if (!rows.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>ยังไม่มีรายงาน</div>'; return; }
-  el.innerHTML = rows.slice(0, 80).map(r => {
+  if (!data.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>ยังไม่มีรายงานผลัดนี้</div>'; return; }
+  el.innerHTML = data.slice(0, 80).map(r => {
     const isW = r.status && r.status.includes('ผิดปกติ');
     const c = pc(r.patrol);
     const zone = r.zoneName || r.zone || r.places || '—';
@@ -456,10 +495,11 @@ function renderReports() {
   }).join('');
 }
 
-function renderMap() {
+function renderMap(data) {
+  data = data || rows;
   markers.forEach(m => map.removeLayer(m));
   markers = [];
-  const gps = rows.filter(r => r.hasGPS);
+  const gps = data.filter(r => r.hasGPS);
   if (!gps.length) return;
 
   gps.forEach(r => {
@@ -486,11 +526,12 @@ function renderMap() {
   // (zoom to fit เฉพาะเมื่อผู้ใช้กดปุ่มในอนาคต)
 }
 
-function renderGPS() {
-  const gps = rows.filter(r => r.hasGPS);
+function renderGPS(data) {
+  data = data || rows;
+  const gps = data.filter(r => r.hasGPS);
   document.getElementById('g-count').textContent = gps.length;
   const el = document.getElementById('gps-list');
-  if (!gps.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🛰️</div>ยังไม่มีพิกัด GPS<br><small style="font-size:11px">GPS จะบันทึกเมื่อสายตรวจรายงานในพื้นที่</small></div>'; return; }
+  if (!gps.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🛰️</div>ยังไม่มีพิกัด GPS ผลัดนี้</div>'; return; }
   el.innerHTML = gps.map(r => {
     const c = pc(r.patrol);
     const isW = r.status && r.status.includes('ผิดปกติ');
