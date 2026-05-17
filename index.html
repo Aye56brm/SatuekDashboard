@@ -258,8 +258,10 @@
     <div class="map-wrap">
       <div id="map"></div>
       <div class="map-toggle">
-        <button class="on" id="btn-street"  onclick="setLayer('street',this)">🗺 แผนที่</button>
-        <button          id="btn-satellite" onclick="setLayer('satellite',this)">🛰 ดาวเทียม</button>
+        <button class="on" id="btn-street"    onclick="setLayer('street',this)">สี</button>
+        <button            id="btn-dark"      onclick="setLayer('dark',this)">มืด</button>
+        <button            id="btn-satellite" onclick="setLayer('satellite',this)">🛰</button>
+        <button            id="btn-topo"      onclick="setLayer('topo',this)">ภูมิ</button>
       </div>
     </div>
   </div>
@@ -320,20 +322,30 @@ const CENTER    = [15.291, 103.284];
 const map = L.map('map', { center:CENTER, zoom:15, zoomControl:true, attributionControl:false });
 
 const LAYERS = {
-  street: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 })
+  street:    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
+  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 }),
+  topo:      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17 }),
 };
 LAYERS.street.addTo(map);
 let currentLayer = 'street';
+
+const LAYER_FILTER = {
+  street:    'none',
+  dark:      'brightness(.9)',
+  satellite: 'none',
+  topo:      'none',
+};
 
 function setLayer(name, btn) {
   map.removeLayer(LAYERS[currentLayer]);
   LAYERS[name].addTo(map);
   currentLayer = name;
-  document.getElementById('btn-street').classList.toggle('on', name==='street');
-  document.getElementById('btn-satellite').classList.toggle('on', name==='satellite');
-  // satellite ไม่ต้อง filter
-  document.querySelector('.leaflet-tile-pane').style.filter = name==='satellite' ? 'brightness(1)' : 'brightness(.8)';
+  ['street','dark','satellite','topo'].forEach(k => {
+    const el = document.getElementById('btn-' + k);
+    if (el) el.classList.toggle('on', k === name);
+  });
+  document.querySelector('.leaflet-tile-pane').style.filter = LAYER_FILTER[name] || 'none';
 }
 
 setTimeout(() => map.invalidateSize(), 500);
