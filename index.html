@@ -482,9 +482,8 @@ function renderMap() {
     markers.push(mk);
   });
 
-  // zoom to fit markers
-  const group = L.featureGroup(markers);
-  map.fitBounds(group.getBounds().pad(.15), { maxZoom:16 });
+  // พล็อต GPS แต่ไม่เปลี่ยน view — คงไว้ที่สตึก
+  // (zoom to fit เฉพาะเมื่อผู้ใช้กดปุ่มในอนาคต)
 }
 
 function renderGPS() {
