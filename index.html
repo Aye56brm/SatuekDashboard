@@ -403,11 +403,14 @@ function parseRowDate(dateStr, timeStr) {
     const m = String(dateStr).match(/(\d+)\s+(\S+)\s+(\d+)/);
     if (!m) return null;
     let y = parseInt(m[3]);
-    if (y < 100) y += 2500;
-    y -= 543;
+    // "69" → 2569 พ.ศ. → 2026 ค.ศ.
+    // "2569" → 2026 ค.ศ.
+    // "2026" → ใช้ตรง
+    if (y < 100) y += 2500;       // 69 → 2569
+    if (y > 2400) y -= 543;       // 2569 → 2026
     const mo = months[m[2]];
     const d  = parseInt(m[1]);
-    if (mo === undefined) return null;
+    if (mo === undefined || isNaN(d) || isNaN(y)) return null;
     const tm = String(timeStr).match(/(\d+)[.:](\d+)/);
     const hr  = tm ? parseInt(tm[1]) : 0;
     const min = tm ? parseInt(tm[2]) : 0;
