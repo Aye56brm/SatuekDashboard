@@ -642,6 +642,49 @@ function lbl(t) { document.getElementById('sync-lbl').textContent=t; }
 function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2500); }
 
 
+
+// ══════════════════════════════════════════
+// ZONE DEFINITIONS
+// ══════════════════════════════════════════
+const ZONE_NAMES = {
+  1: {
+    1:'ที่ว่าการ/สภ./ตลาดสด/บขส',
+    2:'โดมเทศบาล/สวนเฉลิมฯ/พระใหญ่',
+    3:'รร.บ้านสตึก/อนุบาลทศพร',
+    4:'วัดสุจิตต์/สกร.',
+    5:'ม.20/รพ.สัตว์/ละกอการยาง',
+    6:'การไฟฟ้า/ตะวันรีสอร์ต/เรือนไม้หอม',
+    7:'เมทอลกลาส',
+    8:'รร.ทศพร/ตรอ.วิริยะ',
+    9:'พีที/สำราญ',
+    10:'คุ้มมูล/แม่มูล/บ้านชาวประมง',
+  },
+  2: {
+    1:'ธ.กสิกร/สมหวัง/ไทยเครดิต',
+    2:'สตึกพลาซ่า/ตลาด/ฮกกี่/ร้านทอง',
+    3:'วันเรสซิเดนซ์/บ้านแสนสิริ/ม.สนามม้า',
+    4:'ไทยฟูดส์/ม.17นิคมเหนือ',
+    5:'ม.17นิคมสมบูรณ์กลาง',
+    6:'โลตัส/โรงแรมสหพัฒนา/โรงสี',
+    7:'รพ.สตึก/อนุบาลสายสัมพันธ์/7-11รพ.',
+    8:'สหกรณ์/ม.17ใต้',
+    9:'แฟลช/ปตท.เก่า/บีเค/มนูญการช่าง',
+    10:'พรรคภูมิใจไทย/สหพัฒนาค้าข้าว',
+  },
+  3: {
+    1:'ปั๊มตราดาว/ธ.กรุงเทพ/โรงแรมโพธิ์เงิน',
+    2:'วัดประชาบูรณะ/ธกส./7-11/เฮงลิสซิ่ง',
+    3:'ไทยประกัน/มงคลค้าไม้/ศรายุทธฟาร์ม',
+    4:'รร.อนุบาลสตึก/ประชาจัดสรร/เจพีรีสอร์ท',
+    5:'เทศบาล/วัดสตึกบูรพาวนา/บ้านเอื้ออาทร',
+    6:'ท่าทรายโชคชัย/วัดป่ายางน้ำใส',
+    7:'บ้านประชาพัฒนา',
+    8:'สยามยานยนต์/ฮอนด้า/บานาน่าไอที',
+    9:'ม.1บ้านสตึก/ชุมชนริมมูล',
+    10:'โรงสีสหพัฒนา2/บ้านโกกเมือง',
+  }
+};
+
 // ══════════════════════════════════════════
 // ANALYSIS — ดึง Sheet2 และวิเคราะห์
 // ══════════════════════════════════════════
@@ -689,122 +732,157 @@ function renderAnalysis() {
   const n  = summaryRows.length;
   document.getElementById('an-count').textContent = n + ' ผลัด';
 
-  if (!n) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>ยังไม่มีข้อมูลสรุปผลัด<br><small style="font-size:11px">จะมีข้อมูลหลัง 08:00 น. วันพรุ่งนี้</small></div>';
-    return;
+  const today = todayRows();
+  const pColors = {'เขต 1':'#38bdf8','เขต 2':'#c084fc','เขต 3':'#22d3a0','ร้อยเวร':'#f59e0b','จราจร':'#fb923c'};
+
+  // ── ส่วนที่ 1: ผลัดนี้ (real-time จาก Sheet1) ──
+  const todayByPatrol = {};
+  const todayByZone = {1:{},2:{},3:{}};
+  today.forEach(r => {
+    const k = ps(r.patrol);
+    todayByPatrol[k] = (todayByPatrol[k]||0) + 1;
+    // นับโซน
+    const grp = r.patrol.includes('เขต 1')||r.patrol.includes('เขตที่ 1') ? 1
+              : r.patrol.includes('เขต 2')||r.patrol.includes('เขตที่ 2') ? 2
+              : r.patrol.includes('เขต 3')||r.patrol.includes('เขตที่ 3') ? 3
+              : r.patrol.includes('ร้อยเวร')||r.patrol.includes('20') ? parseInt(r.zone)<=10?'r20':0 : 0;
+    const zn = parseInt(r.zone);
+    if ((grp===1||grp===2||grp===3) && zn>=1 && zn<=10) {
+      todayByZone[grp][zn] = (todayByZone[grp][zn]||0) + 1;
+    } else if (grp==='r20' && zn>=1 && zn<=10) {
+      // ร้อยเวรนับรวมโซนของเขตที่ไปลงพื้นที่
+      // ใส่ใน zone map โดยดูจากโซน D
+      [1,2,3].forEach(g => {
+        if (ZONE_NAMES[g][zn]) todayByZone[g][zn] = (todayByZone[g][zn]||0) + 0.5;
+      });
+    }
+  });
+
+  // ── ส่วนที่ 2: ย้อนหลัง 7 วัน จาก Sheet1 raw ──
+  const now = new Date();
+  const d7 = new Date(now); d7.setDate(d7.getDate()-7);
+  const week = rows.filter(r => {
+    const dt = parseRowDate(r.date, r.time);
+    return dt && dt >= d7;
+  });
+  const weekByZone = {1:{},2:{},3:{}};
+  week.forEach(r => {
+    const grp = r.patrol.includes('เขต 1')||r.patrol.includes('เขตที่ 1') ? 1
+              : r.patrol.includes('เขต 2')||r.patrol.includes('เขตที่ 2') ? 2
+              : r.patrol.includes('เขต 3')||r.patrol.includes('เขตที่ 3') ? 3 : null;
+    const isR20 = r.patrol.includes('ร้อยเวร')||r.patrol.includes('20');
+    const zn = parseInt(r.zone);
+    if (grp && zn>=1 && zn<=10) {
+      weekByZone[grp][zn] = (weekByZone[grp][zn]||0) + 1;
+    }
+    if (isR20 && zn>=1 && zn<=10) {
+      // ร้อยเวรนับรวมทุกเขตที่มีโซนนั้น
+      [1,2,3].forEach(g => {
+        if (ZONE_NAMES[g] && ZONE_NAMES[g][zn]) {
+          weekByZone[g][zn] = (weekByZone[g][zn]||0) + 1;
+        }
+      });
+    }
+  });
+
+  const maxWeek = Math.max(...[1,2,3].flatMap(g=>Object.values(weekByZone[g])),1);
+
+  // ── KPI ──
+  const todayOk   = today.filter(r=>!r.status.includes('ผิดปกติ')).length;
+  const todayWarn = today.filter(r=>r.status.includes('ผิดปกติ')).length;
+
+  function zoneHeatRow(grp, zn, weekCnt, todayCnt) {
+    const name = ZONE_NAMES[grp][zn];
+    const pct  = Math.round(weekCnt/maxWeek*100);
+    const heat = weekCnt===0 ? '#1e2840'
+               : weekCnt<=2  ? '#1e3a5f'
+               : weekCnt<=5  ? '#1d5490'
+               : weekCnt<=10 ? '#2563b0'
+               :                '#3b82f6';
+    const todayMark = todayCnt > 0 ? `<span style="font-size:9px;color:#22d3a0;margin-left:4px">✓${todayCnt}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid #1e2840">
+      <div style="width:16px;text-align:right;font-size:10px;font-family:var(--mono);color:var(--muted);flex-shrink:0">${zn}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${name}${todayMark}</div>
+        <div style="height:6px;background:#0b0e15;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${heat};border-radius:3px;transition:width .6s"></div>
+        </div>
+      </div>
+      <div style="width:20px;text-align:right;font-family:var(--mono);font-size:10px;color:${weekCnt===0?'#4e6480':weekCnt>5?'#38bdf8':'var(--fg)'}">
+        ${weekCnt===0?'—':weekCnt}
+      </div>
+    </div>`;
   }
 
-  // ── รวมทุกผลัด ──
-  const totRpt   = summaryRows.reduce((s,r)=>s+r.total,0);
-  const totWarn  = summaryRows.reduce((s,r)=>s+r.warn,0);
-  const avgRpt   = Math.round(totRpt/n);
-
-  // เขตที่ active สุด
-  const byPatrol = {
-    'เขต 1': summaryRows.reduce((s,r)=>s+r.e1,0),
-    'เขต 2': summaryRows.reduce((s,r)=>s+r.e2,0),
-    'เขต 3': summaryRows.reduce((s,r)=>s+r.e3,0),
-    'ร้อยเวร': summaryRows.reduce((s,r)=>s+r.r20,0),
-    'จราจร': summaryRows.reduce((s,r)=>s+r.traffic,0),
-  };
-  const sorted = Object.entries(byPatrol).sort((a,b)=>b[1]-a[1]);
-  const topPatrol = sorted[0];
-  const lowPatrol = sorted[sorted.length-1];
-
-  // โซนที่ปรากฏบ่อยสุดใน topZone
-  const zoneTally = {};
-  summaryRows.forEach(r => {
-    const z = (r.topZone||'').replace(/\s*\(\d+\)$/,'').trim();
-    if (z && z !== '—') zoneTally[z] = (zoneTally[z]||0) + 1;
-  });
-  const topZoneAll = Object.entries(zoneTally).sort((a,b)=>b[1]-a[1]);
-
-  // ผลัดล่าสุด
-  const latest = summaryRows[0];
-
-  // ── สร้าง HTML ──
-  const pColors = {'เขต 1':'#38bdf8','เขต 2':'#c084fc','เขต 3':'#22d3a0','ร้อยเวร':'#f59e0b','จราจร':'#fb923c'};
-  const maxP = Math.max(...Object.values(byPatrol), 1);
+  function zoneSection(grp, color) {
+    const gname = grp===1?'เขต 1':grp===2?'เขต 2':'เขต 3';
+    const zones = Object.keys(ZONE_NAMES[grp]).map(Number).sort((a,b)=>a-b);
+    const missing = zones.filter(z=>(weekByZone[grp][z]||0)===0);
+    return `<div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:${color}">${gname}</div>
+        ${missing.length ? `<div style="font-size:9px;color:var(--warn);background:rgba(240,82,82,.1);padding:2px 7px;border-radius:10px">⚠ ขาด ${missing.length} โซน</div>` : '<div style="font-size:9px;color:var(--ok);background:rgba(34,211,153,.1);padding:2px 7px;border-radius:10px">✓ ครบทุกโซน</div>'}
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between">
+        <span>โซน · ชื่อสถานที่</span><span>7 วัน</span>
+      </div>
+      ${zones.map(zn => zoneHeatRow(grp, zn, weekByZone[grp][zn]||0, todayByZone[grp][zn]||0)).join('')}
+    </div>`;
+  }
 
   el.innerHTML = `
-    <!-- KPI cards -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--accent)">${totRpt}</div>
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">รายงานทั้งหมด</div>
+    <!-- ผลัดนี้ -->
+    <div style="background:var(--surf);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:14px">
+      <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">⚡ ผลัดนี้ — real time</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+        <div style="background:var(--surf2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent)">${today.length}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">รายงาน</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--ok)">${todayOk}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">ปกติ</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${todayWarn>0?'var(--warn)':'var(--muted)'}">${todayWarn}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">ผิดปกติ</div>
+        </div>
       </div>
-      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--ok)">${avgRpt}</div>
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">เฉลี่ย/ผลัด</div>
-      </div>
-      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--warn)">${totWarn}</div>
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">ผิดปกติรวม</div>
-      </div>
-      <div class="ccard" style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--gold)">${n}</div>
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">ผลัดทั้งหมด</div>
-      </div>
-    </div>
-
-    <!-- รายงานรายเขต -->
-    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">รายงานรวมรายประเภทสายตรวจ</div>
-      ${sorted.map(([k,v]) => `
-        <div class="brow">
-          <div class="blbl" style="color:${pColors[k]||'#6b7280'}">${k}</div>
-          <div class="bbg"><div class="bfill" style="width:${Math.round(v/maxP*100)}%;background:${pColors[k]||'#6b7280'}99"></div></div>
-          <div class="bval">${v}</div>
-        </div>`).join('')}
-      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between">
-        <span>🏆 Active สุด: <span style="color:${pColors[topPatrol[0]]}">${topPatrol[0]} (${topPatrol[1]})</span></span>
-        <span>⚠ น้อยสุด: <span style="color:var(--muted)">${lowPatrol[0]} (${lowPatrol[1]})</span></span>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        ${Object.entries(todayByPatrol).map(([k,v])=>`
+          <div style="background:${pColors[k]||'#6b7280'}18;border:1px solid ${pColors[k]||'#6b7280'}44;border-radius:6px;padding:4px 8px;font-size:10px;color:${pColors[k]||'#6b7280'};font-family:var(--mono)">${k} · ${v}</div>
+        `).join('')}
       </div>
     </div>
 
-    <!-- โซนที่ถูกรายงานบ่อยสุด -->
-    ${topZoneAll.length ? `
-    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">โซนที่ถูกรายงานบ่อยสุด (ทุกผลัด)</div>
-      ${topZoneAll.slice(0,5).map(([z,n],idx) => `
-        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
-          <div style="width:20px;height:20px;border-radius:50%;background:var(--surf2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);color:var(--muted);flex-shrink:0">${idx+1}</div>
-          <div style="flex:1;font-weight:500">${z}</div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--accent)">${n} ผลัด</div>
-        </div>`).join('')}
-    </div>` : ''}
+    <!-- heatmap ย้อนหลัง 7 วัน -->
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding:4px 0">
+      🗓 ย้อนหลัง 7 วัน — coverage รายโซน
+      <span style="font-weight:400;font-size:9px;margin-left:6px">✓= ผลัดนี้</span>
+    </div>
 
-    <!-- ผลัดล่าสุด -->
+    ${zoneSection(1,'#38bdf8')}
+    ${zoneSection(2,'#c084fc')}
+    ${zoneSection(3,'#22d3a0')}
+
+    ${!n ? '' : `
+    <!-- สรุปจาก Sheet2 -->
     <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">ผลัดล่าสุด · ${latest.date}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
-        <div style="color:var(--muted)">รวมรายงาน</div><div style="font-family:var(--mono);text-align:right;color:var(--accent)">${latest.total}</div>
-        <div style="color:var(--muted)">ผิดปกติ</div><div style="font-family:var(--mono);text-align:right;color:${latest.warn>0?'var(--warn)':'var(--ok)'}">${latest.warn}</div>
-        <div style="color:var(--muted)">โซนเยอะสุด</div><div style="text-align:right;font-size:10px">${latest.topZone||'—'}</div>
-        <div style="color:var(--muted)">ชั่วโมง Peak</div><div style="font-family:var(--mono);text-align:right">${latest.peakHour||'—'}</div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">📋 สรุปย้อนหลัง ${n} ผลัด</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+        <div style="background:var(--surf2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--accent)">${summaryRows.reduce((s,r)=>s+r.total,0)}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">รายงานสะสม</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--ok)">${Math.round(summaryRows.reduce((s,r)=>s+r.total,0)/n)}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">เฉลี่ย/ผลัด</div>
+        </div>
       </div>
-    </div>
-
-    <!-- ประวัติผลัด -->
-    <div style="background:var(--surf);border:1px solid var(--border);border-radius:10px;padding:14px">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px">ประวัติผลัดย้อนหลัง</div>
-      ${summaryRows.slice(0,10).map(r => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
-          <div style="font-family:var(--mono);color:var(--muted);font-size:10px;width:70px;flex-shrink:0">${r.date}</div>
-          <div style="flex:1">
-            <div style="display:flex;gap:4px;flex-wrap:wrap">
-              ${r.e1?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#38bdf818;color:#38bdf8">1·${r.e1}</span>`:''}
-              ${r.e2?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#c084fc18;color:#c084fc">2·${r.e2}</span>`:''}
-              ${r.e3?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#22d3a018;color:#22d3a0">3·${r.e3}</span>`:''}
-              ${r.r20?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f59e0b18;color:#f59e0b">ร้อย·${r.r20}</span>`:''}
-            </div>
-          </div>
-          <div style="font-family:var(--mono);font-weight:700;color:var(--accent)">${r.total}</div>
-          ${r.warn?`<div style="font-size:9px;color:var(--warn)">⚠${r.warn}</div>`:''}
-        </div>`).join('')}
-    </div>
+    </div>`}
   `;
 }
+
 
 // ══════════════════════════════════════════
 // INIT
