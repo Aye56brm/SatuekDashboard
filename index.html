@@ -538,7 +538,10 @@ function goPage(name, btn) {
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
-  if (name === 'map') setTimeout(() => map.invalidateSize(), 100);
+  if (name === 'map') setTimeout(() => {
+    map.invalidateSize();
+    map.setView(CENTER, 15);
+  }, 150);
   if (name === 'analysis') loadAnalysis();
 }
 
