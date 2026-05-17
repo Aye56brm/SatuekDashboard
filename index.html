@@ -258,8 +258,8 @@
     <div class="map-wrap">
       <div id="map"></div>
       <div class="map-toggle">
-        <button class="on" id="btn-street"    onclick="setLayer('street',this)">สี</button>
-        <button            id="btn-dark"      onclick="setLayer('dark',this)">มืด</button>
+        <button            id="btn-street"    onclick="setLayer('street',this)">สี</button>
+        <button class="on" id="btn-dark"      onclick="setLayer('dark',this)">มืด</button>
         <button            id="btn-satellite" onclick="setLayer('satellite',this)">🛰</button>
         <button            id="btn-topo"      onclick="setLayer('topo',this)">ภูมิ</button>
       </div>
@@ -323,16 +323,16 @@ const map = L.map('map', { center:CENTER, zoom:15, zoomControl:true, attribution
 
 const LAYERS = {
   street:    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
-  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
+  dark:      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', { maxZoom:20 }),
   satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 }),
   topo:      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17 }),
 };
-LAYERS.street.addTo(map);
-let currentLayer = 'street';
+LAYERS.dark.addTo(map);
+let currentLayer = 'dark';
 
 const LAYER_FILTER = {
   street:    'none',
-  dark:      'brightness(.9)',
+  dark:      'brightness(1.1) contrast(1.2)',
   satellite: 'none',
   topo:      'none',
 };
