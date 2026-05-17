@@ -529,11 +529,18 @@ function renderMap(data) {
     });
     const mk = L.marker([r.lat, r.lng], { icon });
     mk.bindPopup(`
-      <div class="pop-zone" style="color:${c}">${r.zoneName||r.zone||'—'}</div>
-      <div class="pop-detail">${r.patrol}</div>
-      <div class="pop-detail">${r.date} · ${r.time}</div>
-      <div class="pop-detail" style="color:${isW?'#f05252':'#22d3a0'};font-weight:600">${isW?'⚠ ผิดปกติ':'✓ ปกติ'}${r.note?' · '+r.note:''}</div>
-    `, { maxWidth: 200 });
+      <div style="min-width:180px">
+        <div class="pop-zone" style="color:${c};font-size:13px;font-weight:700;margin-bottom:4px">${r.zoneName||r.zone||'—'}</div>
+        <div class="pop-detail" style="margin-bottom:2px">🚔 ${r.patrol}</div>
+        <div class="pop-detail" style="margin-bottom:2px">🕐 ${r.date} · ${r.time}</div>
+        <div class="pop-detail" style="color:${isW?'#f05252':'#22d3a0'};font-weight:600;margin-bottom:8px">${isW?'⚠ ผิดปกติ':'✓ ปกติ'}${r.note?' · '+r.note:''}</div>
+        <div class="pop-detail" style="margin-bottom:8px;color:#6b7280;font-size:10px">📍 ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
+        <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank"
+          style="display:block;text-align:center;background:#3b82f6;color:#fff;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">
+          🗺 เปิดใน Google Maps
+        </a>
+      </div>
+    `, { maxWidth: 220 });
     mk.addTo(map);
     markers.push(mk);
   });
