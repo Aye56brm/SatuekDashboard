@@ -317,7 +317,7 @@ const CENTER    = [15.291, 103.284];
 // ══════════════════════════════════════════
 // MAP SETUP
 // ══════════════════════════════════════════
-const map = L.map('map', { center:CENTER, zoom:14, zoomControl:false, attributionControl:false });
+const map = L.map('map', { center:CENTER, zoom:15, zoomControl:true, attributionControl:false });
 
 const LAYERS = {
   street: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }),
@@ -484,7 +484,7 @@ function renderMap() {
 
   // zoom to fit markers
   const group = L.featureGroup(markers);
-  map.fitBounds(group.getBounds().pad(.15));
+  map.fitBounds(group.getBounds().pad(.15), { maxZoom:16 });
 }
 
 function renderGPS() {
